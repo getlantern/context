@@ -14,7 +14,7 @@ func TestStack(t *testing.T) {
 		Put("b", 2).
 		Put("c", 3)
 	c.Enter().
-		Put("c", 4).
+		PutDynamic("c", func() interface{} { return 4 }).
 		Put("d", 5)
 
 	var assertMutex sync.Mutex
@@ -72,6 +72,12 @@ func TestStack(t *testing.T) {
 	// Exit again, just for good measure
 	c.Exit()
 	assertContents(Map{})
+
+	readCalled := false
+	c.Read(func(key string, value interface{}) {
+		readCalled = true
+	})
+	assert.False(t, readCalled, "Read shouldn't be called on empty stack")
 
 	// Spawn a goroutine with no existing contexts
 	wg.Add(1)
