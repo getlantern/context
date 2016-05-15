@@ -77,7 +77,13 @@ func TestStack(t *testing.T) {
 	c.Read(func(key string, value interface{}) {
 		readCalled = true
 	})
-	assert.False(t, readCalled, "Read shouldn't be called on empty stack")
+	assert.False(t, readCalled, "c.Read shouldn't be called on empty stack")
+
+	readCalled = false
+	Read(func(key string, value interface{}) {
+		readCalled = true
+	})
+	assert.False(t, readCalled, "Read shouldn't be called with no context")
 
 	// Spawn a goroutine with no existing contexts
 	wg.Add(1)
