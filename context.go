@@ -1,3 +1,5 @@
+// Package context provides a mechanism for transparently tracking contextual
+// state associated to the current goroutine and even across goroutines.
 package context
 
 import (
