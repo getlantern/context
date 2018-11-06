@@ -14,6 +14,7 @@ func TestStack(t *testing.T) {
 	cm.PutGlobal("a", -1) // This will get overriden in specific contexts
 	cm.PutGlobal("ga", "i")
 	cm.PutGlobalDynamic("gb", func() interface{} { return "ii" })
+	cm.PutGlobalDynamic("gm", func() interface{} { return map[string]interface{}{"gm3": "iii", "gm4": "iv"} })
 
 	// Use a Map as a Contextual
 	var contextual = Map{
@@ -45,6 +46,8 @@ func TestStack(t *testing.T) {
 		doAssertContents(expected, cm.AsMap(nil, false), "AsMapwith(nil, false)")
 		expected["ga"] = "i"
 		expected["gb"] = "ii"
+		expected["gm3"] = "iii"
+		expected["gm4"] = "iv"
 		_, exists := expected["a"]
 		if !exists {
 			expected["a"] = -1
@@ -55,6 +58,8 @@ func TestStack(t *testing.T) {
 		doAssertContents(expected, cm.AsMap(contextual, true), "AsMapWith(contextual, true)")
 		delete(expected, "ga")
 		delete(expected, "gb")
+		delete(expected, "gm3")
+		delete(expected, "gm4")
 		doAssertContents(expected, cm.AsMap(contextual, false), "AsMapWith(contextual, false)")
 	}
 
