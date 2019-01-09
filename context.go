@@ -32,9 +32,10 @@ type Manager interface {
 }
 
 type manager struct {
-	contexts map[uint64]*context
-	global   Map
-	allmx    sync.RWMutex
+	contexts   map[uint64]*context
+	mxContexts sync.RWMutex
+	global     Map
+	mxGlobal   sync.RWMutex
 }
 
 // NewManager creates a new Manager
@@ -109,42 +110,54 @@ type dynval struct {
 }
 
 func (cm *manager) Enter() Context {
-	id := curGoroutineID()
-	cm.allmx.Lock()
-	c := cm.contexts[id]
-	if c == nil {
-		c = cm.makeContext(id, nil, nil)
-		cm.contexts[id] = c
-		cm.allmx.Unlock()
-		return c
+	return cm.enter(curGoroutineID())
+}
+
+func (cm *manager) enter(id uint64) *context {
+	cm.mxContexts.Lock()
+	parentOrNil := cm.contexts[id]
+	c := cm.makeContext(id, parentOrNil, nil)
+	cm.contexts[id] = c
+	cm.mxContexts.Unlock()
+	return c
+}
+
+func (cm *manager) exit(id uint64, parent *context) {
+	cm.mxContexts.Lock()
+	if parent == nil {
+		delete(cm.contexts, id)
+	} else {
+		cm.contexts[id] = parent
 	}
-	cm.allmx.Unlock()
-	return c.Enter()
+	cm.mxContexts.Unlock()
+}
+
+func (cm *manager) branch(id uint64, from *context) {
+	next := cm.makeContext(id, nil, from)
+	cm.mxContexts.Lock()
+	cm.contexts[id] = next
+	cm.mxContexts.Unlock()
+}
+
+func (cm *manager) merge(id uint64) {
+	cm.mxContexts.Lock()
+	delete(cm.contexts, id)
+	cm.mxContexts.Unlock()
 }
 
 func (c *context) Enter() Context {
 	c.mx.RLock()
 	id := c.id
 	c.mx.RUnlock()
-	next := c.cm.makeContext(id, c, nil)
-	c.cm.allmx.Lock()
-	c.cm.contexts[id] = next
-	c.cm.allmx.Unlock()
-	return next
+	return c.cm.enter(id)
 }
 
 func (c *context) Go(fn func()) {
 	go func() {
 		id := curGoroutineID()
-		next := c.cm.makeContext(id, nil, c)
-		c.cm.allmx.Lock()
-		c.cm.contexts[id] = next
-		c.cm.allmx.Unlock()
+		c.cm.branch(id, c)
 		fn()
-		// Clean up the context
-		c.cm.allmx.Lock()
-		delete(c.cm.contexts, id)
-		c.cm.allmx.Unlock()
+		c.cm.merge(id)
 	}()
 }
 
@@ -172,15 +185,7 @@ func (c *context) Exit() {
 	id := c.id
 	parent := c.parent
 	c.mx.RUnlock()
-	if parent == nil {
-		c.cm.allmx.Lock()
-		delete(c.cm.contexts, id)
-		c.cm.allmx.Unlock()
-		return
-	}
-	c.cm.allmx.Lock()
-	c.cm.contexts[id] = parent
-	c.cm.allmx.Unlock()
+	c.cm.exit(id, parent)
 }
 
 func (c *context) Put(key string, value interface{}) Context {
@@ -209,12 +214,6 @@ func (c *context) PutIfAbsent(key string, value interface{}) Context {
 	return c.Put(key, value)
 }
 
-func (cm *manager) PutGlobal(key string, value interface{}) {
-	cm.allmx.Lock()
-	cm.global[key] = value
-	cm.allmx.Unlock()
-}
-
 func (c *context) PutDynamic(key string, valueFN func() interface{}) Context {
 	value := &dynval{valueFN}
 	c.mx.Lock()
@@ -223,11 +222,17 @@ func (c *context) PutDynamic(key string, valueFN func() interface{}) Context {
 	return c
 }
 
+func (cm *manager) PutGlobal(key string, value interface{}) {
+	cm.mxGlobal.Lock()
+	cm.global[key] = value
+	cm.mxGlobal.Unlock()
+}
+
 func (cm *manager) PutGlobalDynamic(key string, valueFN func() interface{}) {
 	value := &dynval{valueFN}
-	cm.allmx.Lock()
+	cm.mxGlobal.Lock()
 	cm.global[key] = value
-	cm.allmx.Unlock()
+	cm.mxGlobal.Unlock()
 }
 
 func (c *context) Fill(m Map) {
@@ -261,9 +266,9 @@ func (c *context) asMap(cm *manager, obj interface{}, includeGlobals bool) Map {
 		c.Fill(result)
 	}
 	if includeGlobals {
-		cm.allmx.RLock()
+		cm.mxGlobal.RLock()
 		fill(result, cm.global)
-		cm.allmx.RUnlock()
+		cm.mxGlobal.RUnlock()
 	}
 	return result
 }
@@ -297,8 +302,8 @@ func fill(m Map, from Map) {
 
 func (cm *manager) currentContext() *context {
 	id := curGoroutineID()
-	cm.allmx.RLock()
+	cm.mxContexts.RLock()
 	c := cm.contexts[id]
-	cm.allmx.RUnlock()
+	cm.mxContexts.RUnlock()
 	return c
 }
