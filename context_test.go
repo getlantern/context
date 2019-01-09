@@ -136,9 +136,9 @@ func TestStack(t *testing.T) {
 	})
 	wg.Wait()
 
-	_cm.allmx.RLock()
+	_cm.mxContexts.Lock()
 	assert.Empty(t, _cm.contexts, "No contexts should be left")
-	_cm.allmx.RUnlock()
+	_cm.mxContexts.Unlock()
 }
 
 func BenchmarkPut(b *testing.B) {
