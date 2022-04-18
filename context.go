@@ -294,7 +294,9 @@ func (cm *manager) Get(key string) (interface{}, bool) {
 }
 
 func (c *context) Get(key string) (interface{}, bool) {
+	c.mx.RLock()
 	result, found := c.data[key]
+	c.mx.RUnlock()
 	if found {
 		return result, found
 	}
