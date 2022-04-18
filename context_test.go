@@ -16,6 +16,9 @@ func TestStack(t *testing.T) {
 	cm.PutGlobalDynamic("gb", func() interface{} { return "ii" })
 	cm.PutGlobalDynamic("gm", func() interface{} { return map[string]interface{}{"gm3": "iii", "gm4": "iv"} })
 
+	a, _ := cm.Get("a")
+	assert.Equal(t, -1, a)
+
 	// Use a Map as a Contextual
 	var contextual = Map{
 		"a":          0, // This will override whatever is in specific contexts
@@ -24,12 +27,18 @@ func TestStack(t *testing.T) {
 
 	c := cm.Enter()
 	c.Put("a", 1)
+	a, _ = cm.Get("a")
+	assert.Equal(t, 1, a)
+
 	penultimate := cm.Enter().
 		Put("b", 2)
 	c = cm.Enter().
 		PutDynamic("c", func() interface{} { return 4 }).
 		PutIfAbsent("d", 5).
 		PutIfAbsent("a", 11)
+
+	a, _ = cm.Get("a")
+	assert.Equal(t, 1, a)
 
 	// Put something in the penultimate context and make sure it doesn't override
 	// what's set in the ultimate context
